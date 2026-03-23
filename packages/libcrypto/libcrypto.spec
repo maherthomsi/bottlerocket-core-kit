@@ -5,7 +5,7 @@
 %global _cross_cxxflags %{_cross_cflags}
 
 Name: %{_cross_os}libcrypto
-Version: 3.0.0
+Version: 3.1.0
 Release: 1%{?dist}
 Summary: AWS-LC cryptographic library
 License: ISC AND (Apache-2.0 OR ISC) AND OpenSSL
