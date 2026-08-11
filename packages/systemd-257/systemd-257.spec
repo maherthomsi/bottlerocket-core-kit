@@ -82,6 +82,14 @@ Patch9016: 9016-bootctl-disable-secure-boot-autoenroll.patch
 # Patch meson to set OPENSSL_NO_UI_CONSOLE CFLAGS for the build
 Patch9017: 9017-meson-set-DOPENSSL_NO_UI_CONSOLE-when-using-openssl.patch
 
+# Correctly check the EFI_STATUS return of the measurement call in
+# tpm_log_tagged_event so early return only happens on failure
+Patch9018: 9018-measure-figure-success-of-measurement-correctly.patch
+
+# Correctly check the EFI_STATUS return of the measurement call in
+# tpm_log_tagged_event so early return only happens on failure
+Patch9019: 9019-measure-figure-success-of-measurement-correctly.patch
+
 BuildRequires: gperf
 BuildRequires: intltool
 BuildRequires: meson
