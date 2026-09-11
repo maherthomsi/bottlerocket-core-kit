@@ -1,3 +1,17 @@
+# v16.4.0 (2026-09-11)
+
+## Build Changes
+* Update Rust and Go dependencies for first-party sources ([#1043])
+* Bump `bottlerocket-settings-models` to 0.28.0 ([#1035])
+
+## Orchestrator Changes
+
+### Kubernetes
+* Add `nvidia-dra-driver-gpu` package ([#1035])
+
+[#1035]: https://github.com/bottlerocket-os/bottlerocket-core-kit/pull/1035
+[#1043]: https://github.com/bottlerocket-os/bottlerocket-core-kit/pull/1043
+
 # v16.3.0 (2026-09-04)
 
 ## OS Changes
