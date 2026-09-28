@@ -1,0 +1,46 @@
+[Unit]
+Description=DRANET DRA driver for network devices
+# The driver attaches interfaces to pods over NRI, which containerd serves at
+# /run/nri/nri.sock, and registers its kubelet plugin socket under
+# /var/lib/kubelet/plugins.
+After=containerd.service kubelet.service
+Wants=kubelet.service
+# Run only when the settings marker is non-empty. The marker uses the same
+# condition as nvidia-dra-driver-gpu, so this driver runs exactly when the GPU
+# DRA driver runs: the kubernetes device plugin is disabled AND the NVIDIA DRA
+# driver is either enabled or unset. It stays empty when the device plugin is
+# enabled, when the NVIDIA DRA driver is explicitly disabled, or when no settings
+# extension is present at all. Network DRA is therefore off by default, and it is
+# never on while the classic device plugin owns the node's devices.
+ConditionFileNotEmpty=/etc/dranet/enabled
+
+[Service]
+# A brief sleep is needed to avoid the `test` failing its first check.
+ExecStartPre=/usr/bin/sleep 0.1
+ExecStartPre=/usr/bin/test -d /var/lib/kubelet/plugins_registry
+# --hostname-override defaults to the host name here; the settings drop-in
+# overrides it with settings.kubernetes.hostname-override (the name the kubelet
+# registers).
+#
+# --bind-address binds the metrics and healthz server to localhost. The upstream
+# default is :9177, which would publish the port on every node interface.
+#
+# --filter drops veth devices (the upstream default) and also the primary
+# interface eth0. A workload that claims the primary interface takes the node
+# off the network, and Bottlerocket boots with net.ifnames=0, so the primary
+# interface is always eth0 on the supported variants. Filter evaluation fails
+# open, so each attribute lookup is guarded by an `in` test.
+ExecStart=/usr/bin/dranet \
+    --hostname-override %H \
+    --kubeconfig /etc/kubernetes/kubelet/kubeconfig \
+    --bind-address 127.0.0.1:9177 \
+    --filter '!("dra.net/type" in attributes) || (attributes["dra.net/type"].StringValue != "veth" && (!("dra.net/ifName" in attributes) || attributes["dra.net/ifName"].StringValue != "eth0"))' \
+    --v 2
+Type=simple
+TimeoutSec=0
+RestartSec=2
+Restart=always
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

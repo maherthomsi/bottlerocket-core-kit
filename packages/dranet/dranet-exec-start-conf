@@ -1,0 +1,24 @@
+[required-extensions]
+kubernetes = "v1"
+kubelet-dra-drivers = "v1"
+std = { version = "v1", helpers = ["if_not_null", "default"] }
++++
+{{#if_not_null settings.kubelet-dra-drivers.nvidia}}
+{{#if (eq (default "false" settings.kubelet-dra-drivers.nvidia.enabled) "true")}}
+[Service]
+ExecStart=
+# ExecStart is rendered here to inject the node name from settings
+# (hostname-override) so that it matches the name the kubelet registers. Whether
+# the unit actually runs is decided by the base-unit ConditionFileNotEmpty
+# marker, which also accounts for the device plugin setting. The unset (null)
+# case falls through to the base unit, which uses %H.
+#
+# See dranet.service for what each flag does.
+ExecStart=/usr/bin/dranet \
+    --hostname-override {{#if_not_null settings.kubernetes.hostname-override}}{{settings.kubernetes.hostname-override}}{{else}}%H{{/if_not_null}} \
+    --kubeconfig /etc/kubernetes/kubelet/kubeconfig \
+    --bind-address 127.0.0.1:9177 \
+    --filter '!("dra.net/type" in attributes) || (attributes["dra.net/type"].StringValue != "veth" && (!("dra.net/ifName" in attributes) || attributes["dra.net/ifName"].StringValue != "eth0"))' \
+    --v 2
+{{/if}}
+{{/if_not_null}}

@@ -1,0 +1,23 @@
+[package]
+name = "dranet"
+version = "0.1.0"
+edition = "2021"
+publish = false
+build = "../build.rs"
+
+[lib]
+path = "../packages.rs"
+
+[package.metadata.build-package]
+releases-url = "https://github.com/kubernetes-sigs/dranet/releases"
+
+# Upstream does not vendor its Go dependencies, so bundle them at fetch time.
+# The bundled archive is unpacked over the source tree in %prep as Source1.
+[[package.metadata.build-package.external-files]]
+url = "https://github.com/kubernetes-sigs/dranet/archive/v1.4.0/dranet-1.4.0.tar.gz"
+path = "dranet-1.4.0.tar.gz"
+sha512 = "3f71015b7e6e389b5453993428df5494c8dfbe8314f02c36a20c7e03b4c109c05045c93be6b6ddf21ded2027e96eb254416b45bda9f425b75d270be7d190a8b9"
+bundle-modules = [ "go" ]
+
+[build-dependencies]
+glibc = { path = "../glibc" }
