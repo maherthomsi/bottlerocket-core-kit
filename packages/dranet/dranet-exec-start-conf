@@ -1,0 +1,30 @@
+[required-extensions]
+kubernetes = "v1"
+kubelet-dra-drivers = "v1"
+std = { version = "v1", helpers = ["if_not_null", "default"] }
++++
+{{#if_not_null settings.kubelet-dra-drivers.net}}
+{{#if (eq (default "false" settings.kubelet-dra-drivers.net.enabled) "true")}}
+[Service]
+ExecStart=
+# An empty value counts as unset for both settings below, so each falls back to a
+# safe default. A blank bind address makes Go serve on port 80 of every interface,
+# and a blank filter disables filtering, which publishes the ENIs the VPC CNI
+# manages.
+#
+# device-filter uses triple braces so handlebars does not escape the double quotes
+# CEL needs, and systemd takes the value in single quotes.
+ExecStart=/usr/bin/dranet \
+    --hostname-override {{#if_not_null settings.kubernetes.hostname-override}}{{settings.kubernetes.hostname-override}}{{else}}%H{{/if_not_null}} \
+    --kubeconfig /etc/kubernetes/kubelet/kubeconfig \
+{{#if settings.kubelet-dra-drivers.net.bind-address}}
+    --bind-address {{{settings.kubelet-dra-drivers.net.bind-address}}} \
+{{else}}
+    --bind-address 127.0.0.1:9177 \
+{{/if}}
+{{#if settings.kubelet-dra-drivers.net.device-filter}}
+    --filter '{{{settings.kubelet-dra-drivers.net.device-filter}}}' \
+{{/if}}
+    --v 2
+{{/if}}
+{{/if_not_null}}
