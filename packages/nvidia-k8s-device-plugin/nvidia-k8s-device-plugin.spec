@@ -67,9 +67,18 @@ install -D -m 0644 %{S:4} %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-pl
 install -D -m 0644 %{S:6} %{buildroot}%{_cross_templatedir}/nvidia-mps-control-daemon-exec-start-conf
 install -D -m 0644 %{S:7} %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-plugin-exec-start-conf-compat
 
+# containerDriverRoot is the cross-compilation sysroot, which holds usr only,
+# so the NVIDIA sockets under /run do not resolve there and the plugin omits
+# them from the CDI specification. Link /run so the lookup finds them. Do not
+# link etc: the host ldcache would then resolve under the sysroot and undo the
+# /usr/lib paths.
+install -d %{buildroot}%{_cross_rootdir}
+ln -s /run %{buildroot}%{_cross_rootdir}/run
+
 %files
 %license LICENSE
 %{_cross_attribution_file}
+%{_cross_rootdir}/run
 %{_cross_bindir}/nvidia-device-plugin
 %{_cross_bindir}/mps-control-daemon
 %{_cross_unitdir}/nvidia-k8s-device-plugin.service
