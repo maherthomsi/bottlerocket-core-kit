@@ -60,8 +60,7 @@ install -p -m 0644 %{S:1} %{buildroot}%{_cross_unitdir}
 install -p -m 0644 %{S:5} %{buildroot}%{_cross_unitdir}
 install -d %{buildroot}%{_cross_unitdir}/nvidia-k8s-device-plugin.service.d
 install -d %{buildroot}%{_cross_unitdir}/nvidia-mps-control-daemon.service.d
-sed -e 's|__PREFIX__|/%{_cross_arch}-bottlerocket-linux-gnu/sys-root|g' %{S:2} > nvidia-k8s-device-plugin-conf
-install -D -m 0644 nvidia-k8s-device-plugin-conf %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-plugin-conf
+install -D -m 0644 %{S:2} %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-plugin-conf
 install -D -m 0644 %{S:3} %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-plugin-exec-start-conf
 install -D -m 0644 %{S:4} %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-plugin-mig-conf
 install -D -m 0644 %{S:6} %{buildroot}%{_cross_templatedir}/nvidia-mps-control-daemon-exec-start-conf

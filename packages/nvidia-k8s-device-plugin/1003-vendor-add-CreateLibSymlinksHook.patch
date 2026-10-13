@@ -1,21 +1,26 @@
-From a368b776c966394725bb59b67d55ebe260364e6a Mon Sep 17 00:00:00 2001
+From ae80035ed01c2b63cbb89db3fecdbfc848677e04 Mon Sep 17 00:00:00 2001
 From: Maher Homsi <maherhom@amazon.com>
-Date: Tue, 16 Jun 2026 22:34:09 +0000
-Subject: [PATCH] vendor: add CreateLibSymlinksHook to vendored
- nvidia-container-toolkit
+Date: Tue, 13 Oct 2026 21:31:52 +0000
+Subject: [PATCH] vendor: add CreateLibSymlinksHook to the vendored toolkit
 
 Update the vendored nvidia-container-toolkit to include the
-CreateLibSymlinksHook feature. This is needed because patch 1002 enables
-this hook in the device plugin, but the vendored toolkit code does not
-include it.
+CreateLibSymlinksHook feature. Patch 1002 enables this hook in the
+device plugin, and the vendored toolkit code does not include it.
+
+The hook links each discovered library into /usr/lib and into the legacy
+/usr/lib/nvidia/tesla. The plugin discovers the driver under /, where
+the runtime sockets and the GSP firmware live, so the library paths that
+it reports start with the cross-compilation sysroot. These links give a
+container the standard path without a transform. A library that already
+is at one of these paths gets no link.
 
 Signed-off-by: Maher Homsi <maherhom@amazon.com>
 ---
- .../internal/discover/hooks.go                | 15 ++++-
- .../internal/discover/lib_path_symlinks.go    | 57 +++++++++++++++++++
+ .../internal/discover/hooks.go                | 15 +++-
+ .../internal/discover/lib_path_symlinks.go    | 72 +++++++++++++++++++
  .../nvidia-container-toolkit/pkg/nvcdi/api.go |  2 +
  .../pkg/nvcdi/driver-nvml.go                  |  3 +
- 4 files changed, 74 insertions(+), 3 deletions(-)
+ 4 files changed, 89 insertions(+), 3 deletions(-)
  create mode 100644 vendor/github.com/NVIDIA/nvidia-container-toolkit/internal/discover/lib_path_symlinks.go
 
 diff --git a/vendor/github.com/NVIDIA/nvidia-container-toolkit/internal/discover/hooks.go b/vendor/github.com/NVIDIA/nvidia-container-toolkit/internal/discover/hooks.go
@@ -71,10 +76,10 @@ index fb16f85..a831b3d 100644
  		}
 diff --git a/vendor/github.com/NVIDIA/nvidia-container-toolkit/internal/discover/lib_path_symlinks.go b/vendor/github.com/NVIDIA/nvidia-container-toolkit/internal/discover/lib_path_symlinks.go
 new file mode 100644
-index 0000000..8b8b7a1
+index 0000000..e0abd66
 --- /dev/null
 +++ b/vendor/github.com/NVIDIA/nvidia-container-toolkit/internal/discover/lib_path_symlinks.go
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,72 @@
 +package discover
 +
 +import (
@@ -82,30 +87,38 @@ index 0000000..8b8b7a1
 +	"path/filepath"
 +)
 +
-+const defaultLegacyLibPath = "/usr/lib/nvidia/tesla"
++// defaultLibPaths holds the directories that get a symlink per discovered
++// library. /usr/lib is the standard location that a container expects, and
++// /usr/lib/nvidia/tesla is the path that older images use.
++var defaultLibPaths = []string{
++	"/usr/lib",
++	"/usr/lib/nvidia/tesla",
++}
 +
 +type libPathSymlinks struct {
 +	Discover
-+	hookCreator   HookCreator
-+	legacyLibPath string
++	hookCreator HookCreator
++	libPaths    []string
 +}
 +
 +// WithLibPathSymlinks decorates the provided discoverer to add a hook that
-+// creates backwards-compatibility symlinks from legacyLibPath/<lib> to the
-+// actual library paths.
-+func WithLibPathSymlinks(mounts Discover, hookCreator HookCreator, legacyLibPath string) Discover {
-+	if legacyLibPath == "" {
-+		legacyLibPath = defaultLegacyLibPath
++// creates symlinks from <libPath>/<lib> to the actual library paths. The
++// discovered libraries live under the driver root, which on an immutable host
++// is a path that a container does not expect, such as a cross-compilation
++// sysroot.
++func WithLibPathSymlinks(mounts Discover, hookCreator HookCreator, libPaths ...string) Discover {
++	if len(libPaths) == 0 {
++		libPaths = defaultLibPaths
 +	}
 +	return &libPathSymlinks{
-+		Discover:      mounts,
-+		hookCreator:   hookCreator,
-+		legacyLibPath: legacyLibPath,
++		Discover:    mounts,
++		hookCreator: hookCreator,
++		libPaths:    libPaths,
 +	}
 +}
 +
 +// Hooks returns hooks from the wrapped discoverer plus a hook to create
-+// library path compatibility symlinks.
++// library path symlinks.
 +func (d *libPathSymlinks) Hooks() ([]Hook, error) {
 +	hooks, err := d.Discover.Hooks()
 +	if err != nil {
@@ -118,10 +131,17 @@ index 0000000..8b8b7a1
 +	}
 +
 +	var links []string
-+	for _, mount := range mounts {
-+		basename := filepath.Base(mount.Path)
-+		link := fmt.Sprintf("%s::%s", mount.Path, filepath.Join(d.legacyLibPath, basename))
-+		links = append(links, link)
++	for _, libPath := range d.libPaths {
++		for _, mount := range mounts {
++			basename := filepath.Base(mount.Path)
++			link := filepath.Join(libPath, basename)
++			// A library that already is at this path needs no symlink, and a
++			// link to itself would replace the library.
++			if link == mount.Path {
++				continue
++			}
++			links = append(links, fmt.Sprintf("%s::%s", mount.Path, link))
++		}
 +	}
 +
 +	symlinkHook := d.hookCreator.Create(CreateLibSymlinksHook, links...)
@@ -146,19 +166,16 @@ index 7bf2fdc..08320c1 100644
  	// Deprecated: Use CreateSymlinksHook instead.
  	HookCreateSymlinks = CreateSymlinksHook
 diff --git a/vendor/github.com/NVIDIA/nvidia-container-toolkit/pkg/nvcdi/driver-nvml.go b/vendor/github.com/NVIDIA/nvidia-container-toolkit/pkg/nvcdi/driver-nvml.go
-index dd4f2b3..cd9ed8e 100644
+index dd4f2b3..85d8880 100644
 --- a/vendor/github.com/NVIDIA/nvidia-container-toolkit/pkg/nvcdi/driver-nvml.go
 +++ b/vendor/github.com/NVIDIA/nvidia-container-toolkit/pkg/nvcdi/driver-nvml.go
 @@ -110,6 +110,9 @@ func (l *nvcdilib) NewDriverLibraryDiscoverer(version string, libcudaSoParentDir
  	cudaCompatLibHookDiscoverer := discover.NewCUDACompatHookDiscoverer(l.logger, l.hookCreator, &discover.EnableCUDACompatHookOptions{HostDriverVersion: version})
  	discoverers = append(discoverers, cudaCompatLibHookDiscoverer)
  
-+	libPathSymlinksDiscoverer := discover.WithLibPathSymlinks(libraries, l.hookCreator, "")
++	libPathSymlinksDiscoverer := discover.WithLibPathSymlinks(libraries, l.hookCreator)
 +	discoverers = append(discoverers, libPathSymlinksDiscoverer)
 +
  	updateLDCache, _ := discover.NewLDCacheUpdateHook(l.logger, libraries, l.hookCreator)
  	discoverers = append(discoverers, updateLDCache)
  
--- 
-2.54.0
-
