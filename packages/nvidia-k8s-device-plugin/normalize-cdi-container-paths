@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# Replace the host root in the container paths of the CDI specifications that
+# the NVIDIA Kubernetes device plugin writes, so that a container finds the
+# driver libraries at /usr/lib/<library>.
+#
+# The plugin discovers the driver under "/", which is where the
+# nvidia-persistenced socket and the GSP firmware live. Discovery resolves
+# every symlink, and /usr is a link into the cross-compilation sysroot, so the
+# library paths that the plugin reports start with that sysroot. This script
+# rewrites the container paths only. The host paths keep the sysroot, because
+# the files are there.
+#
+# The device plugin runs this script from ExecStartPost. The script never
+# fails: a specification that keeps the sysroot paths still gives a container a
+# working driver, through the sysroot path and through the compatibility
+# symlinks under /usr/lib/nvidia/tesla.
+
+set -o nounset -o pipefail
+shopt -s nullglob
+
+readonly spec_dir="/var/run/cdi"
+readonly spec_glob="k8s.device-plugin.nvidia.com-*.json"
+readonly nvidia_ctk="/usr/bin/nvidia-ctk"
+# The work directory is outside spec_dir, so that the kubelet never reads a
+# half-written specification, and on the same file system, so that the move
+# into place is atomic.
+readonly work_dir="/run/nvidia-cdi-normalize"
+readonly settings="/etc/nvidia-k8s-device-plugin/settings.yaml"
+
+# The plugin writes a specification under the cdi strategies only. Leave now
+# under the volume-mounts strategy, instead of waiting for a file that the
+# plugin never writes.
+if ! grep -Eq '^[[:space:]]*deviceListStrategy:.*cdi' "${settings}"; then
+  exit 0
+fi
+
+# The sysroot is the parent of the directory that /usr resolves to. A variant
+# with a real /usr gives "/" here, and the script has nothing to do. The first
+# argument overrides the derived value.
+root="${1:-$(dirname "$(realpath /usr)")}"
+if [ "${root}" = "/" ] || [ ! -x "${nvidia_ctk}" ]; then
+  exit 0
+fi
+
+# Wait for the plugin to write its specifications. It writes them when it
+# starts, before it registers with the kubelet.
+for _ in $(seq 1 30); do
+  specs=("${spec_dir}"/${spec_glob})
+  if [ "${#specs[@]}" -gt 0 ]; then
+    break
+  fi
+  sleep 1
+done
+
+mkdir -p "${work_dir}" || exit 0
+
+for spec in "${spec_dir}"/${spec_glob}; do
+  # The .json suffix tells nvidia-ctk to write JSON and not YAML.
+  tmp="$(mktemp --suffix=.json "${work_dir}/spec-XXXXXX")" || continue
+  if "${nvidia_ctk}" cdi transform root \
+      --from "${root}" --to "/" --relative-to container \
+      --input "${spec}" --output "${tmp}" \
+    && ! cmp -s "${tmp}" "${spec}"; then
+    mv "${tmp}" "${spec}"
+    echo "Normalized container paths in ${spec}"
+    continue
+  fi
+  rm -f "${tmp}"
+done
+
+exit 0

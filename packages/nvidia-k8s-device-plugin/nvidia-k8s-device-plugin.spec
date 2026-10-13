@@ -25,6 +25,8 @@ Source6: nvidia-mps-control-daemon-exec-start-conf
 # default (no-symlink) template. The device plugin's ExecStart always comes from
 # this rendered drop-in, so no separate compat base unit is needed.
 Source7: nvidia-k8s-device-plugin-exec-start-conf-compat
+# Rewrites the container paths in the specifications that the plugin writes.
+Source8: normalize-cdi-container-paths
 
 Patch0001: 0001-Update-MPS-roots-for-immutable-host-OS.patch
 Patch1001: 1001-Ensure-that-generated-CDI-specs-do-not-contain-enabl.patch
@@ -32,6 +34,8 @@ Patch1002: 1002-Enable-library-path-compatibility-symlinks.patch
 Patch1003: 1003-vendor-add-CreateLibSymlinksHook.patch
 
 BuildRequires: %{_cross_os}glibc-devel
+# normalize-cdi-container-paths calls nvidia-ctk.
+Requires: %{_cross_os}nvidia-container-toolkit
 
 %description
 %{summary}.
@@ -54,14 +58,14 @@ go build -ldflags="${GOLDFLAGS}" -o mps-control-daemon ./cmd/mps-control-daemon/
 install -d %{buildroot}%{_cross_bindir}
 install -p -m 0755 nvidia-device-plugin %{buildroot}%{_cross_bindir}
 install -p -m 0755 mps-control-daemon %{buildroot}%{_cross_bindir}
+install -p -m 0755 %{S:8} %{buildroot}%{_cross_bindir}
 
 install -d %{buildroot}%{_cross_unitdir}
 install -p -m 0644 %{S:1} %{buildroot}%{_cross_unitdir}
 install -p -m 0644 %{S:5} %{buildroot}%{_cross_unitdir}
 install -d %{buildroot}%{_cross_unitdir}/nvidia-k8s-device-plugin.service.d
 install -d %{buildroot}%{_cross_unitdir}/nvidia-mps-control-daemon.service.d
-sed -e 's|__PREFIX__|/%{_cross_arch}-bottlerocket-linux-gnu/sys-root|g' %{S:2} > nvidia-k8s-device-plugin-conf
-install -D -m 0644 nvidia-k8s-device-plugin-conf %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-plugin-conf
+install -D -m 0644 %{S:2} %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-plugin-conf
 install -D -m 0644 %{S:3} %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-plugin-exec-start-conf
 install -D -m 0644 %{S:4} %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-plugin-mig-conf
 install -D -m 0644 %{S:6} %{buildroot}%{_cross_templatedir}/nvidia-mps-control-daemon-exec-start-conf
@@ -72,6 +76,7 @@ install -D -m 0644 %{S:7} %{buildroot}%{_cross_templatedir}/nvidia-k8s-device-pl
 %{_cross_attribution_file}
 %{_cross_bindir}/nvidia-device-plugin
 %{_cross_bindir}/mps-control-daemon
+%{_cross_bindir}/normalize-cdi-container-paths
 %{_cross_unitdir}/nvidia-k8s-device-plugin.service
 %{_cross_unitdir}/nvidia-mps-control-daemon.service
 %dir %{_cross_unitdir}/nvidia-k8s-device-plugin.service.d
